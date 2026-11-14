@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="hy">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Գրանցում</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .form-container {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="form-container">
+        <h2>Երեխայի Գրանցման Ձև</h2>
+        <form id="registrationForm">
+
+            <div class="form-group">
+                <label for="childName">Երեխայի Անուն *</label>
+                <input type="text" id="childName" required placeholder="Անուն" maxlength="60">
+            </div>
+
+            <div class="form-group">
+                <label for="childSurname">Երեխայի Ազգանուն *</label>
+                <input type="text" id="childSurname" required placeholder="Ազգանուն" maxlength="60">
+            </div>
+
+            <div class="form-group">
+                <label for="childDob">Ծննդյան Ամսաթիվ *</label>
+                <input type="date" id="childDob" required>
+            </div>
+
+            <div class="form-group">
+                <label for="parentName">Ծնողի Անուն Ազգանուն *</label>
+                <input type="text" id="parentName" required placeholder="Անուն Ազգանուն" maxlength="100">
+            </div>
+
+            <div class="form-group">
+                <label for="phone">Հեռախոսահամար *</label>
+                <input type="tel" id="phone" required placeholder="+374 XXXXXXXX" maxlength="30">
+            </div>
+
+            <div class="form-group">
+                <label for="phone2">Հեռախոսահամար 2</label>
+                <input type="tel" id="phone2" placeholder="+374 XXXXXXXX" maxlength="30">
+            </div>
+
+            <div class="form-group">
+                <label for="address">Հասցե *</label>
+                <input type="text" id="address" required placeholder="Հասցե" maxlength="200">
+            </div>
+
+            <div class="form-group">
+                <label for="photoFile">Կցել Նկար *</label>
+                <input type="file" id="photoFile" accept="image/*" required>
+            </div>
+
+            <button type="submit" id="submitBtn">Գրանցվել</button>
+        </form>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Նոր Firebase (ballet)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDgyGEMIJfrT_N-U-a-39_U7N5JKfsLrvg",
+            authDomain: "ballet-82dcb.firebaseapp.com",
+            projectId: "ballet-82dcb",
+            storageBucket: "ballet-82dcb.firebasestorage.app",
+            messagingSenderId: "1020750431146",
+            appId: "1:1020750431146:web:e2880c0d6a26a9ba3a21d3",
+            measurementId: "G-N0W4X2ZLKJ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Նոր Cloudinary
+        const CLOUDINARY_CLOUD_NAME = "xvaxriwv";
+        const CLOUDINARY_UPLOAD_PRESET = "ballet";
+
+        const form = document.getElementById('registrationForm');
+
+        // Նկարի փոքրացում՝ մինչ Cloudinary ուղարկելը (max 1000px)
+        function resizeImage(file, maxSize = 1000, quality = 0.8) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const reader = new FileReader();
+
+                reader.onload = (e) => { img.src = e.target.result; };
+                reader.onerror = reject;
+
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height = Math.round(height * (maxSize / width));
+                            width = maxSize;
+                        }
+                    } else {
+                        if (height > maxSize) {
+                            width = Math.round(width * (maxSize / height));
+                            height = maxSize;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    canvas.toBlob((blob) => {
+                        if (!blob) { reject(new Error("Նկարը հնարավոր չեղավ սեղմել")); return; }
+                        resolve(blob);
+                    }, 'image/jpeg', quality);
+                };
+
+                img.onerror = () => reject(new Error("Նկարը հնարավոր չեղավ բացել"));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Ուղարկվում է...";
+
+            const file = document.getElementById('photoFile').files[0];
+
+            try {
+                let photoUrl = "";
+
+                if (file) {
+                    submitBtn.textContent = "Նկարը մշակվում է...";
+                    const resizedBlob = await resizeImage(file, 1000, 0.8);
+
+                    submitBtn.textContent = "Ուղարկվում է...";
+                    const cloudinaryData = new FormData();
+                    cloudinaryData.append("file", resizedBlob, "photo.jpg");
+                    cloudinaryData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+                    const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                        method: "POST",
+                        body: cloudinaryData
+                    });
+
+                    if (!cloudinaryResponse.ok) {
+                        throw new Error("Նկարը հնարավոր չեղավ բեռնել Cloudinary:");
+                    }
+
+                    const cloudinaryResult = await cloudinaryResponse.json();
+                    photoUrl = cloudinaryResult.secure_url.replace("/upload/", "/upload/f_webp,q_auto/");
+                }
+
+                const formData = {
+                    childName: document.getElementById('childName').value.trim(),
+                    childSurname: document.getElementById('childSurname').value.trim(),
+                    childDob: document.getElementById('childDob').value,
+                    parentName: document.getElementById('parentName').value.trim(),
+                    phone: document.getElementById('phone').value.trim(),
+                    phone2: document.getElementById('phone2').value.trim(),
+                    address: document.getElementById('address').value.trim(),
+                    photoUrl: photoUrl,
+                    createdAt: new Date()
+                };
+
+                // Պահպանում Firestore-ում ("registrations" հավաքածու)
+                await addDoc(collection(db, "registrations"), formData);
+
+                alert("Տվյալները հաջողությամբ պահպանվեցին դպրոցի բազայում:");
+                form.reset();
+
+            } catch (error) {
+                console.error("Սխալ տեղի ունեցավ: ", error);
+                alert("Գրանցման սխալ. " + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Գրանցվել";
+            }
+        });
+    </script>
+
+</body>
+
+</html>
