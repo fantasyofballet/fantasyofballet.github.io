@@ -117,8 +117,8 @@
             </div>
 
             <div class="form-group">
-                <label for="photoFile">Կցել Նկար *</label>
-                <input type="file" id="photoFile" accept="image/*" required>
+                <label for="photoFile">Կցել Նկար (պարտադիր չէ)</label>
+                <input type="file" id="photoFile" accept="image/*">
             </div>
 
             <button type="submit" id="submitBtn">Գրանցվել</button>
@@ -198,6 +198,7 @@
             try {
                 let photoUrl = "";
 
+                // Նկարը պարտադիր չէ՝ բեռնվում է միայն եթե ընտրված է
                 if (file) {
                     submitBtn.textContent = "Նկարը մշակվում է...";
                     const resizedBlob = await resizeImage(file, 1000, 0.8);
