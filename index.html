@@ -49,6 +49,22 @@
             border-radius: 4px;
             box-sizing: border-box;
             font-size: 14px;
+            background: white;
+        }
+
+        .dob-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dob-row select:nth-child(1) { flex: 1; }
+        .dob-row select:nth-child(2) { flex: 2; }
+        .dob-row select:nth-child(3) { flex: 1.3; }
+
+        .hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
         }
 
         button {
@@ -92,8 +108,12 @@
             </div>
 
             <div class="form-group">
-                <label for="childDob">Ծննդյան Ամսաթիվ *</label>
-                <input type="date" id="childDob" required>
+                <label>Ծննդյան Ամսաթիվ *</label>
+                <div class="dob-row">
+                    <select id="dobDay" required aria-label="Օր"></select>
+                    <select id="dobMonth" required aria-label="Ամիս"></select>
+                    <select id="dobYear" required aria-label="Տարի"></select>
+                </div>
             </div>
 
             <div class="form-group">
@@ -119,6 +139,7 @@
             <div class="form-group">
                 <label for="photoFile">Կցել Նկար (պարտադիր չէ)</label>
                 <input type="file" id="photoFile" accept="image/*">
+                <div class="hint">Նկարը պարտադիր չէ. կարող եք գրանցվել նաև առանց նկարի։</div>
             </div>
 
             <button type="submit" id="submitBtn">Գրանցվել</button>
@@ -148,6 +169,52 @@
         const CLOUDINARY_UPLOAD_PRESET = "ballet";
 
         const form = document.getElementById('registrationForm');
+
+        // ---------- Ծննդյան ամսաթիվ՝ Օր / Ամիս / Տարի ----------
+        const daySel = document.getElementById('dobDay');
+        const monthSel = document.getElementById('dobMonth');
+        const yearSel = document.getElementById('dobYear');
+
+        const months = ["Հունվար", "Փետրվար", "Մարտ", "Ապրիլ", "Մայիս", "Հունիս",
+            "Հուլիս", "Օգոստոս", "Սեպտեմբեր", "Հոկտեմբեր", "Նոյեմբեր", "Դեկտեմբեր"];
+
+        function addOption(select, value, text) {
+            const o = document.createElement('option');
+            o.value = value;
+            o.textContent = text;
+            select.appendChild(o);
+        }
+
+        addOption(daySel, "", "Օր");
+        for (let d = 1; d <= 31; d++) addOption(daySel, String(d), String(d));
+
+        addOption(monthSel, "", "Ամիս");
+        months.forEach((m, i) => addOption(monthSel, String(i + 1), m));
+
+        addOption(yearSel, "", "Տարի");
+        const thisYear = new Date().getFullYear();
+        for (let y = thisYear; y >= thisYear - 18; y--) addOption(yearSel, String(y), String(y));
+
+        // Օրերի քանակը փոխվում է ըստ ամսվա և տարվա (օր.՝ Փետրվար = 28/29)
+        function updateDays() {
+            const m = parseInt(monthSel.value, 10);
+            const y = parseInt(yearSel.value, 10) || 2000; // նահանջ տարվա համար
+            const maxDay = m ? new Date(y, m, 0).getDate() : 31;
+            const current = parseInt(daySel.value, 10);
+
+            daySel.innerHTML = "";
+            addOption(daySel, "", "Օր");
+            for (let d = 1; d <= maxDay; d++) addOption(daySel, String(d), String(d));
+            if (current && current <= maxDay) daySel.value = String(current);
+        }
+        monthSel.addEventListener('change', updateDays);
+        yearSel.addEventListener('change', updateDays);
+
+        function getDob() {
+            const d = daySel.value, m = monthSel.value, y = yearSel.value;
+            if (!d || !m || !y) return "";
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
 
         // Նկարի փոքրացում՝ մինչ Cloudinary ուղարկելը (max 1000px)
         function resizeImage(file, maxSize = 1000, quality = 0.8) {
@@ -186,45 +253,57 @@
             });
         }
 
+        async function uploadPhoto(file) {
+            const resizedBlob = await resizeImage(file, 1000, 0.8);
+            const cloudinaryData = new FormData();
+            cloudinaryData.append("file", resizedBlob, "photo.jpg");
+            cloudinaryData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+            const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                method: "POST",
+                body: cloudinaryData
+            });
+            if (!response.ok) throw new Error("Cloudinary upload failed");
+
+            const result = await response.json();
+            return result.secure_url.replace("/upload/", "/upload/f_webp,q_auto/");
+        }
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            const childDob = getDob();
+            if (!childDob) {
+                alert("Խնդրում ենք ընտրել ծննդյան օրը, ամիսը և տարին:");
+                return;
+            }
 
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.textContent = "Ուղարկվում է...";
 
             const file = document.getElementById('photoFile').files[0];
+            let photoUrl = "";
+            let photoFailed = false;
 
             try {
-                let photoUrl = "";
-
-                // Նկարը պարտադիր չէ՝ բեռնվում է միայն եթե ընտրված է
+                // Նկարը պարտադիր չէ՝ բեռնվում է միայն եթե ընտրված է.
+                // եթե նկարի բեռնումը ձախողվի, գրանցումը միևնույն է կատարվում է առանց նկարի
                 if (file) {
                     submitBtn.textContent = "Նկարը մշակվում է...";
-                    const resizedBlob = await resizeImage(file, 1000, 0.8);
-
-                    submitBtn.textContent = "Ուղարկվում է...";
-                    const cloudinaryData = new FormData();
-                    cloudinaryData.append("file", resizedBlob, "photo.jpg");
-                    cloudinaryData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-                    const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-                        method: "POST",
-                        body: cloudinaryData
-                    });
-
-                    if (!cloudinaryResponse.ok) {
-                        throw new Error("Նկարը հնարավոր չեղավ բեռնել Cloudinary:");
+                    try {
+                        photoUrl = await uploadPhoto(file);
+                    } catch (photoError) {
+                        console.error("Նկարի սխալ: ", photoError);
+                        photoFailed = true;
                     }
-
-                    const cloudinaryResult = await cloudinaryResponse.json();
-                    photoUrl = cloudinaryResult.secure_url.replace("/upload/", "/upload/f_webp,q_auto/");
+                    submitBtn.textContent = "Ուղարկվում է...";
                 }
 
                 const formData = {
                     childName: document.getElementById('childName').value.trim(),
                     childSurname: document.getElementById('childSurname').value.trim(),
-                    childDob: document.getElementById('childDob').value,
+                    childDob: childDob,
                     parentName: document.getElementById('parentName').value.trim(),
                     phone: document.getElementById('phone').value.trim(),
                     phone2: document.getElementById('phone2').value.trim(),
@@ -236,8 +315,11 @@
                 // Պահպանում Firestore-ում ("registrations" հավաքածու)
                 await addDoc(collection(db, "registrations"), formData);
 
-                alert("Տվյալները հաջողությամբ պահպանվեցին դպրոցի բազայում:");
+                alert(photoFailed
+                    ? "Տվյալները պահպանվեցին, բայց նկարը չբեռնվեց:"
+                    : "Տվյալները հաջողությամբ պահպանվեցին դպրոցի բազայում:");
                 form.reset();
+                updateDays();
 
             } catch (error) {
                 console.error("Սխալ տեղի ունեցավ: ", error);
